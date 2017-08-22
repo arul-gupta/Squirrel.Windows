@@ -40,10 +40,48 @@ wchar_t* FindOwnExecutableName()
 	return ret;
 }
 
+
+bool DeleteDirectory(const std::wstring &path) {
+	std::vector<std::wstring::value_type> doubleNullTerminatedPath;
+	std::copy(path.begin(), path.end(), std::back_inserter(doubleNullTerminatedPath));
+	doubleNullTerminatedPath.push_back(L'\0');
+	doubleNullTerminatedPath.push_back(L'\0');
+
+	SHFILEOPSTRUCTW fileOperation;
+	fileOperation.wFunc = FO_DELETE;
+	fileOperation.pFrom = &doubleNullTerminatedPath[0];
+	fileOperation.fFlags = FOF_NO_UI | FOF_NOCONFIRMATION;
+
+	return ::SHFileOperationW(&fileOperation) == 0;
+}
+
+bool DirectoryExists(const std::wstring &path)
+{
+	DWORD dwAttrib = GetFileAttributes(path.c_str());
+
+	return (dwAttrib != INVALID_FILE_ATTRIBUTES &&
+		(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
+}
+
+void ApplyUpdate(const std::wstring &rootDir)
+{
+	// if "currentTemp" folder exists - copy/move it's content to "current" folder
+	auto tempDir = rootDir + L"\\currentTemp";
+	if (!DirectoryExists(tempDir))
+		return;
+	auto currentDir = rootDir + L"\\current";
+
+	DeleteDirectory(currentDir);
+	::MoveFile(tempDir.c_str(), currentDir.c_str());
+}
+
+
 std::wstring FindLatestAppDir(std::wstring appName) 
 {
 	std::wstring ourDir;
 	ourDir.assign(FindRootAppDir());
+
+	ApplyUpdate(ourDir);
 	
 	//If current exists, just use that
 	std::wstring currDir, currFile;
