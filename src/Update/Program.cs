@@ -518,7 +518,6 @@ namespace Squirrel.Update
                 .FirstOrDefault(x => Directory.Exists(x));
 
             //Check for the EXE name they want
-
             var targetExe = new FileInfo(Path.Combine(latestAppDir, exeName.Replace("%20", " ")));
             this.Log().Info("Want to launch '{0}'", targetExe);
 
@@ -536,6 +535,7 @@ namespace Squirrel.Update
 
             this.Log().Info("Waiting for parent to exit");
             if (shouldWait) waitForParentToExit();
+            Trace.WriteLine("An old instance has exited", "[Update.exe]");
             this.Log().Info("parent has exited");
 
             try {
@@ -553,6 +553,7 @@ namespace Squirrel.Update
 
         public FileInfo RunFromCurrent(string exeName, string appDir)
         {
+            Trace.WriteLine("Run from current", "[Update.exe]");
             var currentTempDir = Path.Combine(appDir, "currentTemp");
             var currentDir = Path.Combine(appDir, "current");
 
@@ -560,12 +561,15 @@ namespace Squirrel.Update
             {
                 try
                 {
+                    Directory.SetCurrentDirectory(appDir);
+
                     this.Log().Info("Moving current temp directory to current");
                     if (Directory.Exists(currentDir))
                     {
-                        Utility.EmptyDirectory(currentDir);
-                        Utility.CopyDirectory(new DirectoryInfo(currentTempDir), new DirectoryInfo(currentDir));
-                        Task task = Task.Run(() => Utility.DeleteDirectory(currentTempDir));
+                        var backupCurentDir = currentDir + ".bak";
+                        Directory.Move(currentDir, backupCurentDir);
+                        Directory.Move(currentTempDir, currentDir);
+                        Utility.DeleteDirectory(backupCurentDir).Wait();
                     } else
                     {
                         Directory.Move(currentTempDir, currentDir);
@@ -573,6 +577,7 @@ namespace Squirrel.Update
                 } catch(Exception e)
                 {
                     this.Log().InfoException("Failed to move current directory", e);
+                    Trace.WriteLine($"Failed to move current directory: {e.Message}", "[Update.exe]");
                 }
             }
             if(!Directory.Exists(currentDir))

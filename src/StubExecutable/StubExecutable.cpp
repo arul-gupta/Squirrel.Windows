@@ -8,7 +8,7 @@
 
 using namespace std;
 
-wchar_t* FindRootAppDir() 
+wchar_t* FindRootAppDir()
 {
 	wchar_t* ourDirectory = new wchar_t[MAX_PATH];
 
@@ -24,7 +24,7 @@ wchar_t* FindRootAppDir()
 	return ourDirectory;
 }
 
-wchar_t* FindOwnExecutableName() 
+wchar_t* FindOwnExecutableName()
 {
 	wchar_t* ourDirectory = new wchar_t[MAX_PATH];
 
@@ -63,26 +63,74 @@ bool DirectoryExists(const std::wstring &path)
 		(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
 }
 
-void ApplyUpdate(const std::wstring &rootDir)
+void DoUpdate(const std::wstring &rootDir)
 {
 	// if "currentTemp" folder exists - copy/move it's content to "current" folder
 	auto tempDir = rootDir + L"\\currentTemp";
 	if (!DirectoryExists(tempDir))
+	{
+		::OutputDebugString(L"[Squirrel.Stub] No update was found");
 		return;
+	}
 	auto currentDir = rootDir + L"\\current";
 
-	DeleteDirectory(currentDir);
-	::MoveFile(tempDir.c_str(), currentDir.c_str());
+	if (DeleteDirectory(currentDir))
+	{
+		::OutputDebugString(L"[Squirrel.Stub] Update is performing...");
+		::MoveFile(tempDir.c_str(), currentDir.c_str());
+	}
+	else
+	{
+		::OutputDebugString(L"[Squirrel.Stub] Can't delete directory, aborting...");
+	}
+}
+
+void ApplyUpdate(const std::wstring &rootDir)
+{
+	// prevent simultaneous access
+	auto mutex = ::CreateMutex(NULL, FALSE, L"{5B61E1CF-3813-4622-BC3B-755BF9851D9D}");
+	if (mutex == NULL)
+	{
+		::OutputDebugString(L"[Squirrel.Stub] Can't synchronize update, verification aborted");
+		return;
+	}
+
+	::OutputDebugString(L"[Squirrel.Stub] Start update");
+	auto waitResult = ::WaitForSingleObject(mutex, 60000);
+
+	switch (waitResult)
+	{
+	case WAIT_TIMEOUT:
+		::OutputDebugString(L"[Squirrel.Stub] Can't wait compeltition update, verification aborted");
+		return;
+	case WAIT_OBJECT_0:
+	{
+		__try
+		{
+			DoUpdate(rootDir); // wraped to finction to prevent SEH unwind
+		}
+		__finally
+		{
+			::ReleaseMutex(mutex);
+			mutex = nullptr;
+		}
+	}
+	default:
+		::ReleaseMutex(mutex);
+		mutex = nullptr;
+	}
+
+	::OutputDebugString(L"[Squirrel.Stub] Update finished");
 }
 
 
-std::wstring FindLatestAppDir(std::wstring appName) 
+std::wstring FindLatestAppDir(std::wstring appName)
 {
 	std::wstring ourDir;
 	ourDir.assign(FindRootAppDir());
 
 	ApplyUpdate(ourDir);
-	
+
 	//If current exists, just use that
 	std::wstring currDir, currFile;
 	currDir.assign(FindRootAppDir());
@@ -137,9 +185,9 @@ std::wstring FindLatestAppDir(std::wstring appName)
 }
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
-                     _In_opt_ HINSTANCE hPrevInstance,
-                     _In_ LPWSTR    lpCmdLine,
-                     _In_ int       nCmdShow)
+	_In_opt_ HINSTANCE hPrevInstance,
+	_In_ LPWSTR    lpCmdLine,
+	_In_ int       nCmdShow)
 {
 	std::wstring appName;
 	appName.assign(FindOwnExecutableName());
