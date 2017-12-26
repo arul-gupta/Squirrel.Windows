@@ -87,6 +87,7 @@ namespace Squirrel.Update
     {
         public static IntPtr INVALID_HANDLE_VALUE = IntPtr.Zero;
         public static uint PROV_RSA_FULL = 1;
+        public static uint CRYPT_VERIFYCONTEXT = 0xF0000000;
         public static uint CRYPTCAT_VERSION_1 = 0x100;
         public static Int64 NTE_BAD_KEYSET = 0x80090016L;
         public static uint CRYPT_NEWKEYSET = 0x00000008;
@@ -217,7 +218,7 @@ namespace Squirrel.Update
             //Get cryptographic service provider (CSP) to be passed to CryptCATOpen
             List<string> data = new List<string>();
             IntPtr cryptProv = IntPtr.Zero;
-            bool status = CatalogFunctions.CryptAcquireContext(out cryptProv, IntPtr.Zero, IntPtr.Zero, CatalogFunctions.PROV_RSA_FULL, 0);
+            bool status = CatalogFunctions.CryptAcquireContext(out cryptProv, IntPtr.Zero, IntPtr.Zero, CatalogFunctions.PROV_RSA_FULL, CatalogFunctions.CRYPT_VERIFYCONTEXT);
             if (status == false)
             {
                 uint err = (uint)Marshal.GetLastWin32Error();
