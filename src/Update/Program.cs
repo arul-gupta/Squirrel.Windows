@@ -384,8 +384,8 @@ namespace Squirrel.Update
                         .Where(x => x.Name.ToLowerInvariant().EndsWith(".exe"))
                         .Where(x => !x.Name.ToLowerInvariant().Contains("squirrel.exe"))
                         .Where(x => Utility.ExecutableUsesWin32Subsystem(x.FullName))
-                        .ForEachAsync(x => createExecutableStubForExe(x.FullName))
-                        .Wait();
+                        .ToList()
+                        .ForEach(async x => await createExecutableStubForExe(x.FullName));
 
                     if (signingOpts == null) return;
 
@@ -918,7 +918,7 @@ namespace Squirrel.Update
                         Path.GetTempPath() :
                         Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
 
-                    var file = Path.Combine(dir, String.Format("SquirrelSetup.{0}.log", i).Replace(".0.log", ".log"));
+                    var file = Path.Combine(dir, String.Format("SquirrelSetup-{1:yyyy-MM-dd_hh-mm }.{0}.log", i, DateTime.Now).Replace(".0.log", ".log"));
                     var str = File.Open(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
                     inner = new StreamWriter(str, Encoding.UTF8, 4096, false);
                     return;
