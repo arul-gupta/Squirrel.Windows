@@ -181,3 +181,6 @@ tests/Test.xml
 ## CPP db crap
 *.db
 *.opendb
+
+# NuGet Packages ready to distribution
+src/*.nupkg
