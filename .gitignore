@@ -184,3 +184,6 @@ tests/Test.xml
 
 # NuGet Packages ready to distribution
 src/*.nupkg
+/src/Update/Update_TemporaryKey.pfx
+/.vs/Squirrel/v16/Solution.VC.db-shm
+/.vs/Squirrel/v16

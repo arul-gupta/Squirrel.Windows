@@ -13,12 +13,15 @@ using Splat;
 using Squirrel.Json;
 using NuGet;
 using System.Text.RegularExpressions;
+#if !MONO
+using System.ServiceProcess;
+#endif
 
 namespace Squirrel.Update
 {
     enum UpdateAction {
         Unset = 0, Install, Uninstall, Download, Update, Releasify, Shortcut, 
-        Deshortcut, ProcessStart, UpdateSelf, CheckForUpdate
+        Deshortcut, ProcessStart, UpdateSelf, CheckForUpdate, ServiceStart
     }
 
     class Program : IEnableLogger 
@@ -108,6 +111,8 @@ namespace Squirrel.Update
                     { "updateSelf=", "Copy the currently executing Update.exe into the default location", v => { updateAction =  UpdateAction.UpdateSelf; target = v; } },
                     { "processStart=", "Start an executable in the latest version of the app package", v => { updateAction =  UpdateAction.ProcessStart; processStart = v; }, true},
                     { "processStartAndWait=", "Start an executable in the latest version of the app package", v => { updateAction =  UpdateAction.ProcessStart; processStart = v; shouldWait = true; }, true},
+                    { "serviceStart=", "Start a windows service in the latest version of the app package", v => { updateAction =  UpdateAction.ServiceStart; processStart = v; }, true},
+                    { "serviceStartAndWait=", "Wait for caller to end, and start a windows service in the latest version of the app package", v => { updateAction =  UpdateAction.ServiceStart; processStart = v; shouldWait = true; }, true},
                     "",
                     "Options:",
                     { "h|?|help", "Display Help and exit", _ => {} },
@@ -171,8 +176,11 @@ namespace Squirrel.Update
                 case UpdateAction.ProcessStart:
                     ProcessStart(processStart, processStartArgs, shouldWait);
                     break;
+                case UpdateAction.ServiceStart:
+                    ServiceStart(processStart, processStartArgs, shouldWait);
+                    break;
 #endif
-                case UpdateAction.Releasify:
+                    case UpdateAction.Releasify:
                     Releasify(target, releaseDir, packagesDir, bootstrapperExe, backgroundGif, signingParameters, baseUrl, setupIcon, !noMsi);
                     break;
                 }
@@ -180,8 +188,35 @@ namespace Squirrel.Update
 
             return 0;
         }
+#if !MONO
+        /// <summary>
+        /// Starts an already installed service with the provided name after updating any pending folders
+        /// </summary>
+        /// <param name="serviceName">Service to Start</param>
+        /// <param name="processStartArgs">arguments for the service</param>
+        /// <param name="shouldWait">If enabled, waits for the calling process to end before starting the process</param>
+        private void ServiceStart(string serviceName, string processStartArgs, bool shouldWait)
+        {
+            this.Log().Info($"Service requested start {serviceName} Wait for Parent to End: {shouldWait}");
+            if (shouldWait)
+            {
+                waitForParentToExit();
+                this.Log().Info($"Parent Process ended");
+            }
 
-        public async Task Install(bool silentInstall, ProgressSource progressSource, string sourceDirectory = null)
+            var appDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            UpdateAppFiles(appDir);
+
+            ServiceController service = new ServiceController(serviceName);
+            var args = new string[]{ };
+            if (!string.IsNullOrEmpty(processStartArgs))
+                args = processStartArgs.Split(' ');
+            this.Log().Info($"Service starting {serviceName}");
+            service.Start(args);
+    }
+
+#endif
+    public async Task Install(bool silentInstall, ProgressSource progressSource, string sourceDirectory = null)
         {
             sourceDirectory = sourceDirectory ?? Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             var releasesPath = Path.Combine(sourceDirectory, "RELEASES");
@@ -555,37 +590,12 @@ namespace Squirrel.Update
         public FileInfo RunFromCurrent(string exeName, string appDir)
         {
             Trace.WriteLine("Run from current", "[Update.exe]");
-            var currentTempDir = Path.Combine(appDir, "currentTemp");
-            var currentDir = Path.Combine(appDir, "current");
-
-            if(Directory.Exists(currentTempDir))
-            {
-                try
-                {
-                    Directory.SetCurrentDirectory(appDir);
-
-                    this.Log().Info("Moving current temp directory to current");
-                    if (Directory.Exists(currentDir))
-                    {
-                        var backupCurentDir = currentDir + ".bak";
-                        Directory.Move(currentDir, backupCurentDir);
-                        Directory.Move(currentTempDir, currentDir);
-                        Utility.DeleteDirectory(backupCurentDir).Wait();
-                    } else
-                    {
-                        Directory.Move(currentTempDir, currentDir);
-                    }
-                } catch(Exception e)
-                {
-                    this.Log().InfoException("Failed to move current directory", e);
-                    Trace.WriteLine($"Failed to move current directory: {e.Message}", "[Update.exe]");
-                }
-            }
-            if(!Directory.Exists(currentDir))
+            string currentDir = UpdateAppFiles(appDir);
+            if (!Directory.Exists(currentDir))
             {
                 return null;
             }
-            FileInfo targetExe = new FileInfo(Path.Combine(currentDir,  exeName.Replace("%20", " ")));
+            FileInfo targetExe = new FileInfo(Path.Combine(currentDir, exeName.Replace("%20", " ")));
             this.Log().Info("Want to launch '{0}'", targetExe);
 
             // Check for path canonicalization attacks
@@ -600,6 +610,40 @@ namespace Squirrel.Update
                 return null;
             }
             return targetExe;
+        }
+
+        private string UpdateAppFiles(string appDir)
+        {
+            var currentTempDir = Path.Combine(appDir, "currentTemp");
+            var currentDir = Path.Combine(appDir, "current");
+
+            if (Directory.Exists(currentTempDir))
+            {
+                try
+                {
+                    Directory.SetCurrentDirectory(appDir);
+
+                    this.Log().Info("Moving current temp directory to current");
+                    if (Directory.Exists(currentDir))
+                    {
+                        var backupCurentDir = currentDir + ".bak";
+                        Directory.Move(currentDir, backupCurentDir);
+                        Directory.Move(currentTempDir, currentDir);
+                        Utility.DeleteDirectory(backupCurentDir).Wait();
+                    }
+                    else
+                    {
+                        Directory.Move(currentTempDir, currentDir);
+                    }
+                }
+                catch (Exception e)
+                {
+                    this.Log().InfoException("Failed to move current directory", e);
+                    Trace.WriteLine($"Failed to move current directory: {e.Message}", "[Update.exe]");
+                }
+            }
+
+            return currentDir;
         }
 
         public void ShowHelp()
