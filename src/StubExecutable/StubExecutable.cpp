@@ -5,8 +5,11 @@
 #include "StubExecutable.h"
 
 #include "semver200.h"
+#using <System.ServiceProcess.dll>
+#using <System.dll>
 
 using namespace std;
+
 
 wchar_t* FindRootAppDir()
 {
@@ -63,7 +66,7 @@ bool DirectoryExists(const std::wstring &path)
 		(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
 }
 
-void DoUpdate(const std::wstring &rootDir)
+void DoUpdate(const std::wstring& rootDir)
 {
 	// if "currentTemp" folder exists - copy/move it's content to "current" folder
 	auto tempDir = rootDir + L"\\currentTemp";
@@ -74,6 +77,7 @@ void DoUpdate(const std::wstring &rootDir)
 	}
 	auto currentDir = rootDir + L"\\current";
 
+	// attemp to update files from temp to current
 	if (DeleteDirectory(currentDir))
 	{
 		::OutputDebugString(L"[Squirrel.Stub] Update is performing...");
@@ -81,7 +85,12 @@ void DoUpdate(const std::wstring &rootDir)
 	}
 	else
 	{
-		::OutputDebugString(L"[Squirrel.Stub] Can't delete directory, aborting...");
+		// Delegate the update process to BlueJeansUpdater service if the process is unable to gain enough privelages
+		::OutputDebugString(L"[Squirrel.Stub] Delegate updating to Updater Service ");
+		System::ServiceProcess::ServiceController^ updateService = gcnew System::ServiceProcess::ServiceController("BlueJeansUpdater");
+		updateService->ExecuteCommand(128);
+		updateService->WaitForStatus(System::ServiceProcess::ServiceControllerStatus::Stopped, System::TimeSpan::FromSeconds(10));
+		updateService->WaitForStatus(System::ServiceProcess::ServiceControllerStatus::Running, System::TimeSpan::FromSeconds(10));
 	}
 }
 
